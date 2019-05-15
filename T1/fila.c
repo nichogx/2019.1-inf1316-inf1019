@@ -1,6 +1,3 @@
-#include <sys/types.h>
-#include <stdlib.h>
-
 #include "fila.h"
 
 typedef struct no {
@@ -39,6 +36,7 @@ int FPID_enqueue(pid_t pid, FilaPid *fila) {
 	if (!newNo) return 0;
 
 	newNo->next = NULL;
+	newNo->pid = pid;
 
 	if (!fila->ini) {
 		fila->ini = newNo;

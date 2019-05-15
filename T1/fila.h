@@ -1,3 +1,6 @@
+#include <sys/types.h>
+#include <stdlib.h>
+
 #ifndef FILA_H
 #define FILA_H
 
