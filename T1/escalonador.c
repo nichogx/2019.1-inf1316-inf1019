@@ -29,15 +29,18 @@ typedef struct paramThread {
 } ParamThread;
 
 // controles de término e IO
-int terminou = false;
-int waiting = false;
+static int terminou = false;
+static int waiting = false;
 
 // semáforos
-int semId;
+static int semId;
+
+// filas
+static FilaPid *prior[3];
 
 // função que cuida dos sinais SIGCHLD e SIGUSR1. Modifica as variáveis terminou ou waiting
 // para o escalonador pegar.
-void sighandler(int signo) {
+static void sighandler(int signo) {
 	if (signo == SIGCHLD) { // atual terminou
 		terminou = true;
 	}
@@ -47,10 +50,14 @@ void sighandler(int signo) {
 	}
 }
 
-// função que finaliza o programa (semáforos, memória compartilhada, etc...)
+// função que finaliza o programa (semáforos, filas, memória compartilhada, etc...)
 // pode ser chamada por SIGINT
-void finalize(int signo) {
+static void finalize(int signo) {
 	delSemValue(semId);
+
+	FPID_destroy(prior[0]);
+	FPID_destroy(prior[1]);
+	FPID_destroy(prior[2]);
 
 	if (signo != 0) { // foi chamado por sinal e não pela main
 		exit(0);
@@ -59,7 +66,7 @@ void finalize(int signo) {
 
 // executa um processo pelo seu pid e por um determinado tempo(quantum)
 // retorna o estado do processo ao fim da execução
-tpCondRet executa(pid_t pid, int quantum) {
+static tpCondRet executa(pid_t pid, int quantum) {
     time_t start;
 
     // ESPERA O QUANTUM/PROGRAMA TERMINAR
@@ -103,7 +110,7 @@ tpCondRet executa(pid_t pid, int quantum) {
 }
 
 // função 'main' da thread que irá colocar de volta o PID na fila após o fim do IO
-void *threadEnqueue(void *params) {
+static void *threadEnqueue(void *params) {
 	ParamThread *p = (ParamThread *) params;
 
 	sleep(3);
@@ -118,7 +125,7 @@ void *threadEnqueue(void *params) {
 }
 
 // função para calcular o valor da potência de a elevado a b
-int expo(int a, int b) {
+static int expo(int a, int b) {
 	if (b == 0) {
 		return 1;
 	}
@@ -139,11 +146,10 @@ int main(void) {
 	setSemValue(semId);
 	signal(SIGINT, finalize);
 
-	FilaPid *prior[] = {
-		FPID_create(),
-		FPID_create(),
-		FPID_create()
-	};
+	// criar as filas
+	prior[0] = FPID_create();
+	prior[1] = FPID_create();
+	prior[2] = FPID_create();
 
 	// programas de teste
 	pid_t pidpai = getpid();
