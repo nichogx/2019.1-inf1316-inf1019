@@ -23,7 +23,10 @@ int main (int argc, char **argv) {
 			printf("%d\n", getpid());
 			sleep(1);
 			kill(pidpai, SIGUSR2);
-			raise(SIGSTOP);
+
+			// se não for a última rajada, parar pro escalonador decidir
+			// se continua ou não
+			if (i != atoi(argv[arg]) - 1) raise(SIGSTOP);
 		}
 
 		kill(pidpai, SIGUSR1); // waiting for I/O
