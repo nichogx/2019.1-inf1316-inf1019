@@ -22,6 +22,8 @@ int main (int argc, char **argv) {
 		for (int i = 0; i < atoi(argv[arg]); i++) {
 			printf("%d\n", getpid());
 			sleep(1);
+			kill(pidpai, SIGUSR2);
+			raise(SIGSTOP);
 		}
 
 		kill(pidpai, SIGUSR1); // waiting for I/O

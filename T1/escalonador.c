@@ -1,10 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
-#include <time.h>
 #include <signal.h>
-
 #include <pthread.h>
 
 #include <sys/types.h>
@@ -31,12 +30,14 @@ typedef struct paramThread {
 // controles de término e IO
 static int terminou = false;
 static int waiting = false;
+static int esccount = 0;
 
 // semáforos
 static int semId;
 
 // filas
 static FilaPid *prior[3];
+static FilaPid *temp;
 
 // função que cuida dos sinais SIGCHLD e SIGUSR1. Modifica as variáveis terminou ou waiting
 // para o escalonador pegar.
@@ -47,6 +48,10 @@ static void sighandler(int signo) {
 
 	if (signo == SIGUSR1) { // atual está esperando I/O
 		waiting = true;
+	}
+
+	if (signo == SIGUSR2) { // atual terminou 1s do filho
+		esccount++;
 	}
 }
 
@@ -61,27 +66,24 @@ static void finalize(int signo) {
 
 	if (signo != 0) { // foi chamado por sinal e não pela main
 		exit(0);
+		FPID_destroy(temp);
 	}
 }
 
 // executa um processo pelo seu pid e por um determinado tempo(quantum)
 // retorna o estado do processo ao fim da execução
 static tpCondRet executa(pid_t pid, int quantum) {
-    time_t start;
-
-    // ESPERA O QUANTUM/PROGRAMA TERMINAR
-    time(&start);
-
 	terminou = false;
 	waiting = false;
 	signal(SIGCHLD, sighandler);
 	signal(SIGUSR1, sighandler);
+	signal(SIGUSR2, sighandler);
 
 	printf("FILHO %d SENDO ESCALONADO\n", pid);
-	// PROGRAMA INICIA/CONTINUA
-    kill(pid, SIGCONT);
 
-    while(time(NULL)-start < quantum && !waiting) { // SIGUSR1 modificará waiting para true
+	esccount = 0; // SIGUSR2 incrementa
+    while (esccount < quantum && !waiting) { // SIGUSR1 modificará waiting para true
+		kill(pid, SIGCONT);
 		if (terminou) { // SIGCHLD modificará terminou para true
 			int status;
 			waitpid(pid, &status, WNOHANG);
@@ -98,6 +100,7 @@ static tpCondRet executa(pid_t pid, int quantum) {
 
 	signal(SIGCHLD, SIG_DFL);
 	signal(SIGUSR1, SIG_DFL);
+	signal(SIGUSR2, SIG_DFL);
 
 	if (waiting) {
 		puts("FILHO ESPERANDO IO");
@@ -114,7 +117,7 @@ static void *threadEnqueue(void *params) {
 	ParamThread *p = (ParamThread *) params;
 
 	sleep(3);
-	puts("COLOCANDO DNV");
+	printf("FILHO %d TERMINOU I/O, COLOCANDO NA FILA\n", p->pid);
 	semaforoP(semId);
 		FPID_enqueue(p->pid, p->fila);
 	semaforoV(semId);
@@ -139,7 +142,11 @@ int main(void) {
 	puts("TRABALHO 1 DE SC/SO - ESCALONADOR");
 	puts("Por Alexandre Heine e Nicholas Godoy");
 	puts("GitHub: https://github.com/nichogx/2019.1-inf1316-inf1019/tree/master/T1");
-	puts("\nPara sair digite ^C\n");
+	puts("\nPara sair digite ^C ou espere 10 segundos após todos os processos terminarem.\n");
+
+	puts("Digite comandos... Lista de comandos:\n");
+	puts("    exec ./progfilho t1 t2 t3...  - para colocar um programa na fila");
+	puts("    start                         - para começar o escalonador\n");
 
 	// setar semáforos
 	semId = semget (IPC_PRIVATE, 1, 0666 | IPC_CREAT);
@@ -154,17 +161,42 @@ int main(void) {
 	// programas de teste
 	pid_t pidpai = getpid();
 	pid_t filho = 0;
-	if ((filho = fork()) == 0) {
-		char argpidpai[20];
-		sprintf(argpidpai, "%d", pidpai);
-		execl("./progfilho", "./progfilho", argpidpai, "3", "3", "3", NULL);
-	} else {
-		kill(filho, SIGSTOP);
-		puts("PAROU FILHO NO CREATE");
 
-		semaforoP(semId);
-			FPID_enqueue(filho, prior[0]);
-		semaforoV(semId);
+	char spidpai[20];
+	sprintf(spidpai, "%d", pidpai);
+
+	char inBuf[201];
+	char cmd[11];
+	printf(" > ");
+	scanf("%10s", cmd);
+	while (strcmp(cmd, "exec") == 0) {
+		scanf(" %200[^\n]", inBuf);
+
+		char *argv[12];
+		int argc = 0;
+		argv[1] = spidpai;
+
+		char *str = strtok (inBuf, " ");
+		while (str != NULL) {
+			if (argc == 1) argc++;
+			argv[argc++] = strdup(str);
+			str = strtok (NULL, " ");
+		}
+		argv[argc] = NULL;
+
+		if ((filho = fork()) == 0) {
+			execv(argv[0], argv);
+		} else {
+			kill(filho, SIGSTOP);
+			puts("Programa foi colocado na fila.");
+
+			semaforoP(semId);
+				FPID_enqueue(filho, prior[0]);
+			semaforoV(semId);
+		}
+
+		printf(" > ");
+		scanf("%10s", cmd);
 	}
 
 	sleep(2);
@@ -173,37 +205,54 @@ int main(void) {
 	while(cont < 10) { // parar se passar 10 segundos sem atividade
 		for (int i = 0; i < 3; i++) { // anda pelas filas, prioridade menor para maior
 			int quantum = expo(2, i);
-			int qtd = 4 / quantum; // 4 segundos para cada fila
+			int qtd = expo(2, 2 - i);
 			for (int j = 0; j < qtd && !FPID_isempty(prior[i]); j++) {
 				cont = 0; // reseta para o while não parar
 
-				semaforoP(semId);
-					pid_t pid = FPID_dequeue(prior[i]);
-				semaforoV(semId);
+				temp = FPID_create(); // fila pra reinserir
 
-				printf("FILHO %d NO NIVEL %d VAI SER ESCALONADO\n", pid, i);
-				tpCondRet condicao = executa(pid, quantum);
-				if (condicao == CONDRET_RODANDO) { // foi interrompido? coloca de volta na fila e diminui prioridade
-					int novafila = (i + 1 < 2) ? (i + 1) : 2;
-
+				while (!FPID_isempty(prior[i])) {
 					semaforoP(semId);
-						FPID_enqueue(pid, prior[novafila]);
+						pid_t pid = FPID_dequeue(prior[i]);
 					semaforoV(semId);
-				} else if (condicao == CONDRET_ESPERANDO_IO) { // aumentar prioridade se estiver io bound
-					int novafila = i ? (i - 1) : 0;
 
-					ParamThread *params = (ParamThread *) malloc (sizeof(ParamThread));
-					if (!params) {
-						puts("ERRO DE MEMÓRIA (malloc)");
-						exit(1);
+					printf("FILHO %d NO NIVEL %d VAI SER ESCALONADO\n", pid, i);
+
+					tpCondRet condicao = executa(pid, quantum);
+					if (condicao == CONDRET_RODANDO) { // foi interrompido? coloca de volta na fila e diminui prioridade
+						int novafila = (i + 1 < 2) ? (i + 1) : 2;
+
+						if (novafila == i) {
+							semaforoP(semId);
+								FPID_enqueue(pid, temp);
+							semaforoV(semId);
+						} else {
+							semaforoP(semId);
+								FPID_enqueue(pid, prior[novafila]);
+							semaforoV(semId);
+						}
+					} else if (condicao == CONDRET_ESPERANDO_IO) { // aumentar prioridade se estiver io bound
+						int novafila = i ? (i - 1) : 0;
+
+						ParamThread *params = (ParamThread *) malloc (sizeof(ParamThread));
+						if (!params) {
+							puts("ERRO DE MEMÓRIA (malloc)");
+							exit(1);
+						}
+
+						params->fila = prior[novafila];
+						params->pid = pid;
+
+						pthread_t thread;
+						pthread_create(&thread, NULL, threadEnqueue, (void *) params);
 					}
-
-					params->fila = prior[novafila];
-					params->pid = pid;
-
-					pthread_t thread;
-					pthread_create(&thread, NULL, threadEnqueue, (void *) params);
 				}
+
+				while (!FPID_isempty(temp)) {
+					FPID_enqueue(FPID_dequeue(temp), prior[i]);
+				}
+
+				FPID_destroy(temp);
 			}
 		}
 
