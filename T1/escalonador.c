@@ -29,7 +29,6 @@ typedef struct paramThread {
 } ParamThread;
 
 // controles de término e IO
-static int terminou = false;
 static int waiting = false;
 static int esccount = 0;
 
@@ -40,13 +39,9 @@ static int semId;
 static FilaPid *prior[3];
 static FilaPid *temp;
 
-// função que cuida dos sinais SIGCHLD e SIGUSR1. Modifica as variáveis terminou ou waiting
+// função que cuida dos sinais SIGUSR1 e SIGUSR2. Modifica as variáveis waiting e esccount
 // para o escalonador pegar.
 static void sighandler(int signo) {
-	if (signo == SIGCHLD) { // atual terminou
-		terminou = true;
-	}
-
 	if (signo == SIGUSR1) { // atual está esperando I/O
 		waiting = true;
 	}
@@ -74,9 +69,7 @@ static void finalize(int signo) {
 // executa um processo pelo seu pid e por um determinado tempo(quantum)
 // retorna o estado do processo ao fim da execução
 static tpCondRet executa(pid_t pid, int quantum) {
-	terminou = false;
 	waiting = false;
-	signal(SIGCHLD, sighandler);
 	signal(SIGUSR1, sighandler);
 	signal(SIGUSR2, sighandler);
 
@@ -85,21 +78,18 @@ static tpCondRet executa(pid_t pid, int quantum) {
 	esccount = 0; // SIGUSR2 incrementa
     while (esccount < quantum && !waiting) { // SIGUSR1 modificará waiting para true
 		kill(pid, SIGCONT);
-		if (terminou) { // SIGCHLD modificará terminou para true
-			int status;
-			waitpid(pid, &status, WNOHANG);
-			if (WIFSIGNALED(status)) { // não terminou, foi parado pelo escalonador
-				terminou = false;
-			} else { // terminou
-				puts("FILHO TERMINOU");
-				return CONDRET_TERMINOU;
-			}
+
+		int status;
+		waitpid(pid, &status, WNOHANG);
+
+		if (WIFEXITED(status)) {
+			puts("FILHO TERMINOU");
+			return CONDRET_TERMINOU;
 		}
 	} // se sair do while, não terminou
 
     kill(pid, SIGSTOP);
 
-	signal(SIGCHLD, SIG_DFL);
 	signal(SIGUSR1, SIG_DFL);
 	signal(SIGUSR2, SIG_DFL);
 
