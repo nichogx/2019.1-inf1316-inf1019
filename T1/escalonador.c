@@ -20,6 +20,7 @@ typedef enum {
 	CONDRET_RODANDO,
 	CONDRET_TERMINOU,
 	CONDRET_ESPERANDO_IO,
+	CONDRET_MANTER_FILA,
 } tpCondRet;
 
 typedef struct paramThread {
@@ -103,6 +104,11 @@ static tpCondRet executa(pid_t pid, int quantum) {
 	signal(SIGUSR2, SIG_DFL);
 
 	if (waiting) {
+		if (esccount == quantum) {
+			puts("FILHO ESPERANDO IO (TEMPO BATEU COM QUANTUM)");
+			return CONDRET_MANTER_FILA;
+		}
+
 		puts("FILHO ESPERANDO IO");
 		return CONDRET_ESPERANDO_IO;
 	}
@@ -241,6 +247,18 @@ int main(void) {
 						}
 
 						params->fila = prior[novafila];
+						params->pid = pid;
+
+						pthread_t thread;
+						pthread_create(&thread, NULL, threadEnqueue, (void *) params);
+					} else if (condicao == CONDRET_MANTER_FILA) { // manter na mesma fila
+						ParamThread *params = (ParamThread *) malloc (sizeof(ParamThread));
+						if (!params) {
+							puts("ERRO DE MEMÓRIA (malloc)");
+							exit(1);
+						}
+
+						params->fila = prior[i];
 						params->pid = pid;
 
 						pthread_t thread;

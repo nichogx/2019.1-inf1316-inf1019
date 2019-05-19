@@ -22,7 +22,7 @@ int main (int argc, char **argv) {
 		for (int i = 0; i < atoi(argv[arg]); i++) {
 			printf("%d\n", getpid());
 			sleep(1);
-			kill(pidpai, SIGUSR2);
+			kill(pidpai, SIGUSR2); // acabou u.t.
 
 			// se não for a última rajada, parar pro escalonador decidir
 			// se continua ou não
