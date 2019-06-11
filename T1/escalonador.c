@@ -66,6 +66,15 @@ static void finalize(int signo) {
 	}
 }
 
+// função que printa as 3 filas
+static void printFilas() {
+	semaforoP(semId);
+		FPID_print(prior[0], 0);
+		FPID_print(prior[1], 1);
+		FPID_print(prior[2], 2);
+	semaforoV(semId);
+}
+
 // executa um processo pelo seu pid e por um determinado tempo(quantum)
 // retorna o estado do processo ao fim da execução
 static tpCondRet executa(pid_t pid, int quantum) {
@@ -105,7 +114,6 @@ static tpCondRet executa(pid_t pid, int quantum) {
 
 	puts("FILHO ESGOTOU QUANTUM");
     return CONDRET_RODANDO;
-
 }
 
 // função 'main' da thread que irá colocar de volta o PID na fila após o fim do IO
@@ -208,6 +216,9 @@ int main(void) {
 				temp = FPID_create(); // fila pra reinserir
 
 				while (!FPID_isempty(prior[i])) {
+					puts("FILAS: ");
+					printFilas();
+
 					semaforoP(semId);
 						pid_t pid = FPID_dequeue(prior[i]);
 					semaforoV(semId);
@@ -227,6 +238,7 @@ int main(void) {
 								FPID_enqueue(pid, prior[novafila]);
 							semaforoV(semId);
 						}
+						printFilas();
 					} else if (condicao == CONDRET_ESPERANDO_IO) { // aumentar prioridade se estiver io bound
 						int novafila = i ? (i - 1) : 0;
 

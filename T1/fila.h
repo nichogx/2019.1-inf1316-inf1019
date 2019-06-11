@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #ifndef FILA_H
 #define FILA_H
@@ -20,5 +21,8 @@ pid_t FPID_dequeue(FilaPid *fila);
 
 // checa se uma fila de pids é vazia
 int FPID_isempty(FilaPid *fila);
+
+// printa uma fila inteira
+void FPID_print(FilaPid *fila, int num);
 
 #endif // FILA_H

@@ -68,3 +68,15 @@ pid_t FPID_dequeue(FilaPid *fila) {
 int FPID_isempty(FilaPid *fila) {
 	return fila->ini == NULL;
 }
+
+void FPID_print(FilaPid *fila, int num) {
+	No *p = fila->ini;
+
+	printf("FILA %d: ", num);
+	while (p != NULL) {
+		printf("%d -> ", p->pid);
+		p = p->next;
+	}
+
+	puts("NULL");
+}
