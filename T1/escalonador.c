@@ -216,7 +216,7 @@ int main(void) {
 				temp = FPID_create(); // fila pra reinserir
 
 				while (!FPID_isempty(prior[i])) {
-					puts("FILAS: ");
+					puts("===================\nFILAS: ");
 					printFilas();
 
 					semaforoP(semId);
@@ -238,7 +238,6 @@ int main(void) {
 								FPID_enqueue(pid, prior[novafila]);
 							semaforoV(semId);
 						}
-						printFilas();
 					} else if (condicao == CONDRET_ESPERANDO_IO) { // aumentar prioridade se estiver io bound
 						int novafila = i ? (i - 1) : 0;
 
@@ -266,6 +265,7 @@ int main(void) {
 						pthread_t thread;
 						pthread_create(&thread, NULL, threadEnqueue, (void *) params);
 					}
+					puts("===================");
 				}
 
 				while (!FPID_isempty(temp)) {
@@ -281,7 +281,7 @@ int main(void) {
 		sleep(1);
 	}
 
-	puts("10 SEGUNDOS SEM ATIVIDADE. TERMINANDO PROGRAMA.");
+	puts("===================\n\n10 SEGUNDOS SEM ATIVIDADE. TERMINANDO PROGRAMA.");
 
 	finalize(0);
     return 0;
