@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+// Tipo de algorítmo a ser utilizado para substituição de páginas.
 typedef enum {
 	ALG_LRU,
 	ALG_NRU,

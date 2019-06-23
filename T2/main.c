@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
 	}
 
 	char *algoritmo = argv[1];
+	for (char *p = algoritmo; *p; ++p) *p = tolower(*p);
 	char *arquivo = argv[2];
 	int tamPag = atoi(argv[3]);
 	int tamMem = atoi(argv[4]);
@@ -27,18 +28,30 @@ int main(int argc, char **argv) {
 		erroComando(argv[0], "Não foi possível abrir o arquivo.");
 	}
 
+	puts("Executando o simulador...");
+	printf("Arquivo de entrada: %s\n", arquivo);
+	printf("Tamanho da memória física: %d KB\n", tamMem);
+	printf("Tamanho das páginas: %d KB\n", tamPag);
+	printf("Alg de substituição: %s\n", algoritmo);
+
 	// chamar algorítmo correto
-	if (strcmp(algoritmo, "LRU") == 0) {
-		VMEM_inicia(arqFile, tamPag, tamMem, ALG_LRU);
-	} else if (strcmp(algoritmo, "NRU") == 0) {
-		VMEM_inicia(arqFile, tamPag, tamMem, ALG_NRU);
-	} else if (strcmp(algoritmo, "NOVO") == 0) {
-		VMEM_inicia(arqFile, tamPag, tamMem, ALG_NOVO);
+	int ret = 0;
+	if (strcmp(algoritmo, "lru") == 0) {
+		ret = VMEM_inicia(arqFile, tamPag, tamMem, ALG_LRU);
+	} else if (strcmp(algoritmo, "nru") == 0) {
+		ret = VMEM_inicia(arqFile, tamPag, tamMem, ALG_NRU);
+	} else if (strcmp(algoritmo, "novo") == 0) {
+		ret = VMEM_inicia(arqFile, tamPag, tamMem, ALG_NOVO);
 	} else {
 		fclose(arqFile);
 		erroComando(argv[0], "Algorítmo não reconhecido.");
 	}
 
+	if (ret) {
+		puts("ERRO NA SIMULAÇÃO.");
+	} else {
+		puts("SIMULAÇÃO FINALIZADA.");
+	}
 	fclose(arqFile);
 
 	return 0;
