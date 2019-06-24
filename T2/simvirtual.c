@@ -11,11 +11,12 @@ typedef int bool;
 
 // estruturas encapsuladas
 
-typedef struct pagina {
+typedef struct entrTab {
 	__int64_t lastAccess;
-	unsigned char flags;
-	int numpag;
-} Pagina;
+	unsigned char flagsRW; // 0001 READ, 0010 WRITE
+	unsigned int endFisico;
+	bool inMemory;
+} EntradaTabela;
 
 // variáveis encapsuladas
 
@@ -25,87 +26,93 @@ static int pageHits = 0;
 
 // cabeçalho das funções locais
 
-static int pageFault(VMEM_tipoAlgoritmo tipoAlg, Pagina **mem, int numPaginas, int novaPag);
+static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag);
+static int power2(int num);
 
 // funções exportadas
 
 int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
-	int bits = 0;
-	int maxAddr = tamPag * 1024 - 1;
+	unsigned int bits = 0;
+	unsigned int maxAddr = tamPag * 1024 - 1;
 	while (maxAddr > 0) {
 		maxAddr >>= 1;
 		bits++;
 	}
 
-	// quantas páginas terão em memória
-	int numPaginas = tamMem / tamPag;
-	Pagina **mem = (Pagina **) malloc(numPaginas * sizeof(Pagina *));
-	if (!mem) {
-		puts("Memória insuficiente (erro no malloc do vetor de páginas).");
+	// tabela de páginas
+	int numPages = power2(32 - bits);
+	EntradaTabela **tp = (EntradaTabela **) malloc(numPages * sizeof(EntradaTabela *));
+	if (!tp) {
+		puts("Memória insuficiente (erro no malloc da tabela de páginas).");
 		return 1;
 	}
 
-	// zera as páginas
-	for (int i = 0; i < numPaginas; i++) {
-		mem[i] = NULL;
+	// preenche tabela de paginas
+	for (int i = 0; i < numPages; i++) {
+		tp[i] = (EntradaTabela *) malloc(sizeof(EntradaTabela));
+		tp[i]->endFisico = 0;
+		tp[i]->flagsRW = 0;
+		tp[i]->inMemory = false;
+		tp[i]->lastAccess = 0;
+	}
+
+	// quantas páginas terão em memória
+	int numQuadros = tamMem / tamPag;
+	int *mem = (int *) malloc(numQuadros * sizeof(int));
+	if (!mem) {
+		puts("Memória insuficiente (erro no malloc do vetor que representa memória).");
+		return 1;
+	}
+
+	// desaloca a memória toda
+	for (int i = 0; i < numQuadros; i++) {
+		mem[i] = -1;
 	}
 
 	unsigned int addr = 0;
 	char mode = 'U';
 	int res = 0;
 	while ((res = fscanf(log, "%x %c ", &addr, &mode)) != EOF) {
-		if (instante % 100 == 0) { // clear de todos os bits R e W
-			for (int i = 0; i < numPaginas; i++) {
-				if (mem[i] != NULL) {
-					mem[i]->flags = 0;
-				}
-			}
-		}
-
 		if (res != 2) {
 			puts("Erro durante a leitura do arquivo. O arquivo parece estar em formato inválido.");
 			return 1;
 		}
 
-		int page = addr >> (32 - bits);
-		int vaddr = (addr << bits) >> bits;
+		unsigned int page = addr >> bits;
+		unsigned int vaddr = (addr << (32 - bits)) >> (32 - bits);
 
-		int position = -1;
-		for (int i = 0; i < numPaginas; i++) {
-			if (mem[i] != NULL && mem[i]->numpag == page) {
-				position = i;
-				break;
-			}
+		if (page > numPages) {
+			puts("Erro durante a leitura do arquivo. O número da página é maior que o número de páginas");
+			return 1;
 		}
 
-		if (position == -1) { // não achou
-			position = pageFault(tipoAlg, mem, numPaginas, page);
-			if (position == -1) {
-				puts("Memória insuficiente (erro no malloc na pageFault).");
-				return 1;
-			}
+		if (!tp[page]->inMemory) { // não achou
+			pageFault(tipoAlg, mem, numQuadros, tp, page);
 		} else {
 			pageHits++;
 		}
 
-		mem[position]->lastAccess = instante;
+		tp[page]->lastAccess = instante;
 		if (mode == 'R') {
-			mem[position]->flags |= FLAG_READ;
+			tp[page]->flagsRW |= FLAG_READ;
 		} else {
-			mem[position]->flags |= FLAG_WRITE;
+			tp[page]->flagsRW |= FLAG_WRITE;
 		}
 
 		instante++;
 	}
 
-	for (int i = 0; i < numPaginas; i++) {
-		if (mem[i] != NULL) {
-			free(mem[i]);
-		}
+	// libera tabela de páginas
+	for (int i = 0; i < numPages; i++) {
+		free(tp[i]);
 	}
+	free(tp);
+
+	// libera vetor que representa memória
 	free(mem);
 
-	printf("Número de Páginas: %d\n", numPaginas);
+	printf("Número de Páginas em Memória: %d\n", numQuadros);
+	printf("Número de Páginas na TP: %d\n", numPages);
 	printf("Instante Final: %ld\n", instante);
 	printf("Page faults: %d\n", pageFaults);
 	printf("Page hits: %d\n", pageHits);
@@ -116,34 +123,44 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 // funções locais
 
 // retorna o índice na memória com a nova página
-static int pageFault(VMEM_tipoAlgoritmo tipoAlg, Pagina **mem, int numPaginas, int novaPag) {
+static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag) {
 	pageFaults++;
 
-	int pag = 0;
+	int newEnd = 0; // novo endereço da página na memória
 	int lastAccessed = instante;
-	for (int i = 0; i < numPaginas; i++) {
-		if (mem[i] == NULL) { // achou lugar vazio pra nova página
-			pag = i;
+	for (int i = 0; i < numQuadros; i++) {
+		if (mem[i] == -1) { // achou lugar vazio pra nova página na memória
+			newEnd = i;
 			break;
 		}
 
 		// TIPO DE ALGORÍTMO LRU
-		if (tipoAlg == ALG_LRU && mem[i]->lastAccess < lastAccessed) {
-			lastAccessed = mem[i]->lastAccess;
-			pag = i;
+		if (tipoAlg == ALG_LRU && tp[mem[i]]->lastAccess < lastAccessed) {
+			lastAccessed = tp[mem[i]]->lastAccess;
+			newEnd = i;
 		}
 
 		// TIPO DE ALGORÍTMO NRU
 
-	} // sai do for com pag = número da página a ser substituída
+	} // sai do for com pag = endereço da página a ser substituída
 
-	if (mem[pag] != NULL) free(mem[pag]); // "tira da memória"
-	mem[pag] = (Pagina *) malloc(sizeof(Pagina)); // "coloca nova na memória"
-	if (mem[pag] == NULL) return -1;
+	if (mem[newEnd] != -1) {// "tira da memória", não era um endereço vazio
+		tp[mem[newEnd]]->inMemory = false;
+	}
 
-	mem[pag]->flags = 0;
-	mem[pag]->lastAccess = 0;
-	mem[pag]->numpag = novaPag;
+	tp[numPag]->inMemory = true; // "coloca nova na memória"
+	tp[numPag]->endFisico = newEnd;
 
-	return pag;
+	mem[newEnd] = numPag;
+}
+
+// retorna a potência de 2 equivalente
+static int power2(int num) {
+	int result = 1;
+	while (num) {
+		result *= 2;
+		num--;
+	}
+
+	return result;
 }

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "simvirtual.h"
 
@@ -21,6 +22,14 @@ int main(int argc, char **argv) {
 	char *arquivo = argv[2];
 	int tamPag = atoi(argv[3]);
 	int tamMem = atoi(argv[4]);
+
+	if (tamPag < 8 || tamPag > 32) {
+		erroComando(argv[0], "Tamanho de página deve ser entre 8 e 32 KB.");
+	}
+
+	if (tamMem < tamPag) {
+		erroComando(argv[0], "Memória deve ser maior que o tamanho das páginas.");
+	}
 
 	// abrir arquivo
 	FILE *arqFile = fopen(arquivo, "r");
