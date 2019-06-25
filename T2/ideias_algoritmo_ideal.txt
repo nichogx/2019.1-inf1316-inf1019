@@ -1,0 +1,7 @@
+Slides do Seibel:
+
+Algoritmo de substituição ideal
+•  Substitui a página que será acessada no futuro mais remoto
+	–Infelizmente, não é viável na prática, pois exigiria um conhecimento sobre todos os acessos futuros
+
+•  Usado apenas em simulações para avaliar o quanto os algoritmos concretos diferem do algoritmo ideal
