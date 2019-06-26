@@ -6,7 +6,7 @@ all: simvirtual
 
 $(OBJDIR)/%.o: %.c
 	mkdir -p $(OBJDIR)
-	gcc -c -o $@ $<
+	gcc -Wall -c -o $@ $<
 
 # ==== PROGRAM ====
 

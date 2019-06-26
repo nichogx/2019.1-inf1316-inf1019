@@ -127,22 +127,60 @@ static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, Entr
 	pageFaults++;
 
 	int newEnd = 0; // novo endereço da página na memória
-	int lastAccessed = instante;
-	for (int i = 0; i < numQuadros; i++) {
+	bool found = false;
+	for (int i = 0; i < numQuadros && !found; i++) {
 		if (mem[i] == -1) { // achou lugar vazio pra nova página na memória
 			newEnd = i;
-			break;
+			found = true;
+		}
+	}
+
+	if (!found) {
+
+		if (tipoAlg == ALG_LRU) { // TIPO DE ALGORÍTMO LRU
+			int lastAccessed = instante;
+			for (int i = 0; i < numQuadros; i++) {
+				if(tp[mem[i]]->lastAccess < lastAccessed) {
+					lastAccessed = tp[mem[i]]->lastAccess;
+					newEnd = i;
+				}
+			}
+		} else if (tipoAlg == ALG_NRU) { // TIPO DE ALGORÍTMO NRU
+			bool nruFound = false;
+
+			// busca --
+			for (int i = 0; i < numQuadros && !nruFound; i++) {
+				if (!(tp[mem[i]]->flagsRW & FLAG_READ) && !(tp[mem[i]]->flagsRW & FLAG_WRITE)) {
+					// achou um sem read e sem write
+					newEnd = i;
+					nruFound = true;
+				}
+			}
+
+			// busca -W
+			for (int i = 0; i < numQuadros && !nruFound; i++) {
+				if (!(tp[mem[i]]->flagsRW & FLAG_READ)) {
+					// achou um sem read e com write
+					newEnd = i;
+					nruFound = true;
+				}
+			}
+
+			// busca R-
+			for (int i = 0; i < numQuadros && !nruFound; i++) {
+				if (!(tp[mem[i]]->flagsRW & FLAG_WRITE)) {
+					// achou um sem write, com read
+					newEnd = i;
+					nruFound = true;
+				}
+			}
+
+			// se chegou aqui sem achar, todos são RW. Tirar o primeiro.
+		} else if (tipoAlg == ALG_NOVO) { // TIPO DE ALGORÍTMO NOVO
+
 		}
 
-		// TIPO DE ALGORÍTMO LRU
-		if (tipoAlg == ALG_LRU && tp[mem[i]]->lastAccess < lastAccessed) {
-			lastAccessed = tp[mem[i]]->lastAccess;
-			newEnd = i;
-		}
-
-		// TIPO DE ALGORÍTMO NRU
-
-	} // sai do for com pag = endereço da página a ser substituída
+	} // sai daqui com newEnd = endereço da página a ser substituída
 
 	if (mem[newEnd] != -1) {// "tira da memória", não era um endereço vazio
 		tp[mem[newEnd]]->inMemory = false;
