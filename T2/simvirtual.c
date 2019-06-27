@@ -117,7 +117,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		}
 
 		// reseta as flags a cada 1000 iterações (só se for NRU)
-		if (tipoAlg == ALG_NRU && instante % 1000 == 0) {
+		if (tipoAlg == ALG_NRU && instante % 128 == 0) {
 			for (int i = 0; i < numQuadros; i++) {
 				if (mem[i] != -1 && (tp[mem[i]]->flagsRW & FLAG_READ)) tp[mem[i]]->flagsRW &= FLAG_WRITE;
 			}
@@ -138,9 +138,8 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		}
 
 		tp[page]->lastAccess = instante;
-		if (mode == 'R') {
-			tp[page]->flagsRW |= FLAG_READ;
-		} else {
+		tp[page]->flagsRW |= FLAG_READ;
+		if (mode == 'W') {
 			tp[page]->flagsRW |= FLAG_WRITE;
 		}
 
