@@ -39,7 +39,7 @@ static int globalNPages = 0;
 
 // cabeçalho das funções locais
 
-static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag);
+static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag, FILE *log);
 static int power2(int num);
 
 #ifdef _DEBUG
@@ -132,7 +132,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		#endif
 
 		if (!tp[page]->inMemory) { // não achou
-			pageFault(tipoAlg, mem, numQuadros, tp, page);
+			pageFault(tipoAlg, mem, numQuadros, tp, page, log);
 		} else {
 			pageHits++;
 		}
@@ -173,7 +173,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 // funções locais
 
 // retorna o índice na memória com a nova página
-static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag) {
+static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag, FILE *log) {
 	pageFaults++;
 
 	#ifdef _DEBUG
@@ -229,8 +229,7 @@ static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, Entr
 				}
 			}
 
-			// se chegou aqui sem achar, todos são RW. Tirar o primeiro.
-			newEnd = 0;
+			// se chegou aqui sem achar, todos são RW. Tirar o primeiro. (já é zero aqui)
 		} else if (tipoAlg == ALG_NOVO) { // TIPO DE ALGORÍTMO NOVO
 
 		}
