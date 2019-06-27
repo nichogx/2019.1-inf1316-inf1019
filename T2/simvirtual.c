@@ -1,3 +1,7 @@
+#ifdef _DEBUG
+#include <signal.h>
+#endif
+
 #include "simvirtual.h"
 
 typedef int bool;
@@ -24,14 +28,29 @@ static __int64_t instante = 0;
 static int pageFaults = 0;
 static int pageHits = 0;
 
+#ifdef _DEBUG
+// variáveis globais para liberar memória
+static EntradaTabela **globalTP = NULL;
+static int *globalMEM = NULL;
+static int globalNPages = 0;
+#endif
+
 // cabeçalho das funções locais
 
 static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag);
 static int power2(int num);
 
+#ifdef _DEBUG
+static void finalize(int signal);
+#endif
+
 // funções exportadas
 
 int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
+	#ifdef _DEBUG
+	signal(SIGINT, finalize);
+	#endif
+
 	unsigned int bits = 0;
 	unsigned int maxAddr = tamPag * 1024 - 1;
 	while (maxAddr > 0) {
@@ -46,6 +65,12 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		puts("Memória insuficiente (erro no malloc da tabela de páginas).");
 		return 1;
 	}
+
+	#ifdef _DEBUG
+	// globaliza tp ao módulo para liberar
+	globalTP = tp;
+	globalNPages = numPages;
+	#endif
 
 	// preenche tabela de paginas
 	for (int i = 0; i < numPages; i++) {
@@ -64,10 +89,19 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		return 1;
 	}
 
+	#ifdef _DEBUG
+	// globaliza mem ao módulo para liberar
+	globalMEM = mem;
+	#endif
+
 	// desaloca a memória toda
 	for (int i = 0; i < numQuadros; i++) {
 		mem[i] = -1;
 	}
+
+	#ifdef _DEBUG
+	puts("Aperte enter para ir de linha em linha.\n");
+	#endif
 
 	unsigned int addr = 0;
 	char mode = 'U';
@@ -79,12 +113,12 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		}
 
 		unsigned int page = addr >> bits;
-		unsigned int vaddr = (addr << (32 - bits)) >> (32 - bits);
 
-		if (page > numPages) {
-			puts("Erro durante a leitura do arquivo. O número da página é maior que o número de páginas");
-			return 1;
-		}
+		#ifdef _DEBUG
+		unsigned int vaddr = (addr << (32 - bits)) >> (32 - bits);
+		printf("LIDO: %08X %c\n", addr, mode);
+		printf("page %d desl %u\n", page, vaddr);
+		#endif
 
 		if (!tp[page]->inMemory) { // não achou
 			pageFault(tipoAlg, mem, numQuadros, tp, page);
@@ -100,6 +134,10 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		}
 
 		instante++;
+
+		#ifdef _DEBUG
+		getc(stdin);
+		#endif
 	}
 
 	// libera tabela de páginas
@@ -125,6 +163,10 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 // retorna o índice na memória com a nova página
 static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag) {
 	pageFaults++;
+
+	#ifdef _DEBUG
+	puts("PAGE FAULT!");
+	#endif
 
 	int newEnd = 0; // novo endereço da página na memória
 	bool found = false;
@@ -202,3 +244,20 @@ static int power2(int num) {
 
 	return result;
 }
+
+#ifdef _DEBUG
+// trata liberação de memória se for chamado com ^C
+static void finalize(int signal) {
+	puts("\n[SIGINT] Liberando memória...");
+	// libera tabela de páginas
+	for (int i = 0; i < globalNPages; i++) {
+		free(globalTP[i]);
+	}
+	free(globalTP);
+
+	// libera vetor que representa memória
+	free(globalMEM);
+	puts("[SIGINT] Finalizado.");
+	exit(1);
+}
+#endif

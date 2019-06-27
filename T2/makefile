@@ -1,16 +1,26 @@
-OBJDIR=./obj
+# ==== INIT ====
+
+OBJDIR = ./obj
+FLAGS =
+
+# ==== GENERAL ====
 
 all: simvirtual
 
-# ==== DIRECTORIES ====
+remake: clean all
+
+debug: FLAGS += -D_DEBUG -g
+debug: all
+
+# ==== OBJECTS ====
 
 $(OBJDIR)/%.o: %.c
 	mkdir -p $(OBJDIR)
-	gcc -Wall -c -o $@ $<
+	gcc -Wall -c -o $@ $< $(FLAGS)
 
 # ==== PROGRAM ====
 
-OBJS=$(addprefix $(OBJDIR)/, main.o simvirtual.o)
+OBJS = $(addprefix $(OBJDIR)/, main.o simvirtual.o)
 simvirtual: $(OBJS) simvirtual.h
 	gcc -Wall -o simvirtual $(OBJS)
 
@@ -19,10 +29,3 @@ simvirtual: $(OBJS) simvirtual.h
 clean:
 	rm -f simvirtual
 	rm -rf $(OBJDIR)
-
-# ==== TEST MEMORY ====
-
-testmem:
-	valgrind --leak-check=full --track-origins=yes ./simvirtual lru compilador.log 8 128
-	valgrind --leak-check=full --track-origins=yes ./simvirtual nru compilador.log 8 128
-	valgrind --leak-check=full --track-origins=yes ./simvirtual novo compilador.log 8 128

@@ -3,6 +3,10 @@
 #include <string.h>
 #include <ctype.h>
 
+#ifdef _DEBUG
+#include <unistd.h>
+#endif
+
 #include "simvirtual.h"
 
 static void erroComando(char *chamado, char *msg) {
@@ -42,6 +46,23 @@ int main(int argc, char **argv) {
 	printf("Tamanho da memória física: %d KB\n", tamMem);
 	printf("Tamanho das páginas: %d KB\n", tamPag);
 	printf("Alg de substituição: %s\n", algoritmo);
+
+	#ifdef _DEBUG
+	puts("\n==== MODO DE DEBUG ATIVADO ====");
+
+	// checa tamanho do arquivo
+	fseek(arqFile, 0L, SEEK_END);
+	int sz = ftell(arqFile);
+	if (sz > 11 * 20) {
+		printf("\nATENÇÃO: O arquivo selecionado é grande para o debug (%d bytes), haverão muitos prints! Recomenda-se menos de 20 linhas.\n\n", sz);
+		puts("Aperte enter para continuar mesmo assim...");
+		getc(stdin);
+	}
+	fseek(arqFile, 0L, SEEK_SET);
+
+	puts("Iniciando em 3 segundos...");
+	sleep(3);
+	#endif
 
 	// chamar algorítmo correto
 	int ret = 0;
