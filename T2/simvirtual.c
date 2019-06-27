@@ -10,6 +10,7 @@ typedef int bool;
 
 // defines das flags
 
+#define FLAG_NONE 0x00
 #define FLAG_READ 0x01
 #define FLAG_WRITE 0x02
 
@@ -27,6 +28,7 @@ typedef struct entrTab {
 static __int64_t instante = 0;
 static int pageFaults = 0;
 static int pageHits = 0;
+static int memWrites = 0;
 
 #ifdef _DEBUG
 // variáveis globais para liberar memória
@@ -76,7 +78,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 	for (int i = 0; i < numPages; i++) {
 		tp[i] = (EntradaTabela *) malloc(sizeof(EntradaTabela));
 		tp[i]->endFisico = 0;
-		tp[i]->flagsRW = 0;
+		tp[i]->flagsRW = FLAG_NONE;
 		tp[i]->inMemory = false;
 		tp[i]->lastAccess = 0;
 	}
@@ -110,6 +112,13 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		if (res != 2) {
 			puts("Erro durante a leitura do arquivo. O arquivo parece estar em formato inválido.");
 			return 1;
+		}
+
+		// reseta as flags a cada 1000 iterações (só se for NRU)
+		if (tipoAlg == ALG_NRU && instante % 1000 == 0) {
+			for (int i = 0; i < numQuadros; i++) {
+				if (mem[i] != -1 && (tp[mem[i]]->flagsRW & FLAG_READ)) tp[mem[i]]->flagsRW &= FLAG_WRITE;
+			}
 		}
 
 		unsigned int page = addr >> bits;
@@ -154,6 +163,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 	printf("Instante Final: %ld\n", instante);
 	printf("Page faults: %d\n", pageFaults);
 	printf("Page hits: %d\n", pageHits);
+	printf("Reescritas para a memória: %d\n", memWrites);
 
 	return 0;
 }
@@ -226,6 +236,9 @@ static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, Entr
 
 	if (mem[newEnd] != -1) {// "tira da memória", não era um endereço vazio
 		tp[mem[newEnd]]->inMemory = false;
+		if (tp[mem[newEnd]]->flagsRW & FLAG_WRITE) {
+			memWrites++;
+		}
 	}
 
 	tp[numPag]->inMemory = true; // "coloca nova na memória"
