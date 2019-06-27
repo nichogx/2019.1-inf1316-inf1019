@@ -49,6 +49,8 @@ static void finalize(int signal);
 // funções exportadas
 
 int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
+	tamMem *= 1024; // MB para KB
+
 	#ifdef _DEBUG
 	signal(SIGINT, finalize);
 	#endif
@@ -228,6 +230,7 @@ static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, Entr
 			}
 
 			// se chegou aqui sem achar, todos são RW. Tirar o primeiro.
+			newEnd = 0;
 		} else if (tipoAlg == ALG_NOVO) { // TIPO DE ALGORÍTMO NOVO
 
 		}
@@ -237,6 +240,7 @@ static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, Entr
 	if (mem[newEnd] != -1) {// "tira da memória", não era um endereço vazio
 		tp[mem[newEnd]]->inMemory = false;
 		if (tp[mem[newEnd]]->flagsRW & FLAG_WRITE) {
+			tp[mem[newEnd]]->flagsRW = FLAG_NONE;
 			memWrites++;
 		}
 	}

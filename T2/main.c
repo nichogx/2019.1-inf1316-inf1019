@@ -12,7 +12,7 @@
 static void erroComando(char *chamado, char *msg) {
 	puts("Erro no comando.");
 	printf("%s\n", msg);
-	printf("Forma de uso: %s <algoritmo LRU|NRU|NOVO> <arquivo> <tamPag> <tamMem>\n", chamado);
+	printf("Forma de uso: %s <algoritmo LRU|NRU|NOVO> <arquivo> <tamPagKB> <tamMemMB>\n", chamado);
 	exit(1);
 }
 
@@ -31,8 +31,8 @@ int main(int argc, char **argv) {
 		erroComando(argv[0], "Tamanho de página deve ser entre 8 e 32 KB.");
 	}
 
-	if (tamMem < tamPag) {
-		erroComando(argv[0], "Memória deve ser maior que o tamanho das páginas.");
+	if (tamMem < 1 || tamMem > 16) {
+		erroComando(argv[0], "Tamanho da memória deve ser entre 1 e 16 MB.");
 	}
 
 	// abrir arquivo
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
 
 	puts("Executando o simulador...");
 	printf("Arquivo de entrada: %s\n", arquivo);
-	printf("Tamanho da memória física: %d KB\n", tamMem);
+	printf("Tamanho da memória física: %d MB\n", tamMem);
 	printf("Tamanho das páginas: %d KB\n", tamPag);
 	printf("Alg de substituição: %s\n", algoritmo);
 
