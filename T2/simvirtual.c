@@ -2,6 +2,8 @@
 #include <signal.h>
 #endif
 
+#include <pthread.h>
+
 #include "simvirtual.h"
 
 // tipo booleano
@@ -18,11 +20,15 @@ typedef int bool;
 
 // constantes
 
-#define TAM_VET_FUT 1000
-#define INST_NOVO 128
+#define NUM_THREADS 8
 #define INST_NRU 1000
 
 // estruturas encapsuladas
+
+typedef struct paramThread {
+	int *proxAcc;
+	int ini, fin;
+} ParamThread;
 
 typedef struct entrTab {
 	__int64_t lastAccess;
@@ -33,10 +39,17 @@ typedef struct entrTab {
 
 // variáveis encapsuladas
 
-static __int64_t instante = 0;
+static int instante = 0;
 static int pageFaults = 0;
 static int pageHits = 0;
 static int memWrites = 0;
+
+static int *mem = NULL;
+static int numQuadros = 0;
+static EntradaTabela **tp = NULL;
+static int numPages = 0;
+static int *futuro = NULL;
+static int tamFuturo = 0;
 
 #ifdef _DEBUG
 // variáveis globais para liberar memória
@@ -47,8 +60,9 @@ static int globalNPages = 0;
 
 // cabeçalho das funções locais
 
-static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag, int* futuro);
+static int pageFault(VMEM_tipoAlgoritmo tipoAlg, int numPag);
 static int power2(int num);
+static void *threadMain(void *params);
 
 #ifdef _DEBUG
 static void finalize(int signal);
@@ -71,8 +85,8 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 	}
 
 	// tabela de páginas
-	int numPages = power2(32 - bits);
-	EntradaTabela **tp = (EntradaTabela **) malloc(numPages * sizeof(EntradaTabela *));
+	numPages = power2(32 - bits);
+	tp = (EntradaTabela **) malloc(numPages * sizeof(EntradaTabela *));
 	if (!tp) {
 		puts("Memória insuficiente (erro no malloc da tabela de páginas).");
 		return 1;
@@ -94,21 +108,41 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 	}
 
 	// quantas páginas terão em memória
-	int numQuadros = tamMem / tamPag;
-	int *mem = (int *) malloc(numQuadros * sizeof(int));
+	numQuadros = tamMem / tamPag;
+	mem = (int *) malloc(numQuadros * sizeof(int));
 	if (!mem) {
 		puts("Memória insuficiente (erro no malloc do vetor que representa memória).");
 		return 1;
 	}
 
 	// vetor de páginas lidas para algoritmo NOVO
-	int *futuro = NULL;
 	if (tipoAlg == ALG_NOVO) {
-		futuro = (int *) malloc(TAM_VET_FUT * sizeof(int));
+		fseek(log, 0L, SEEK_END);
+		int sz = ftell(log);
+		fseek(log, 0L, SEEK_SET);
+
+		tamFuturo = sz / 11; // 11 bytes por linha
+		futuro = (int *) malloc(tamFuturo * sizeof(int));
 		if (!futuro) {
 			puts("Memória insuficiente (erro no malloc do vetor futuro).");
 			return 1;
 		}
+
+		int posVet = 0;
+		unsigned int addr = 0;
+		char mode = 'U';
+		int res = 0;
+		while ((res = fscanf(log, "%x %c ", &addr, &mode)) != EOF) {
+			if (res != 2) {
+				puts("Erro durante a leitura do arquivo. O arquivo parece estar em formato inválido.");
+				return 1;
+			}
+
+			futuro[posVet] = addr >> bits;
+			posVet++;
+		}
+
+		fseek(log, 0L, SEEK_SET);
 	}
 
 	#ifdef _DEBUG
@@ -141,36 +175,6 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 			}
 		}
 
-		// atualiza o vetor novo a cada INST_NOVO iterações (só se for NOVO)
-		if (tipoAlg == ALG_NOVO && instante % INST_NOVO == 0) {
-
-			int endOfFile = 0;
-			fseek(log, TAM_VET_FUT - INST_NOVO, SEEK_CUR);
-
-			for (int i = 0; i < TAM_VET_FUT; i++) {
-
-				// anda com as informações do vetor sem precisar ler o arquivo
-				if(i < TAM_VET_FUT - INST_NOVO) {
-					futuro[i] = futuro[i + INST_NOVO];
-
-				} else {
-					int resAux = 0;
-					char modeAux = 'U';
-
-					// atualiza as últimas INST_NOVO posições com fscanf do arquivo
-					if (endOfFile == 0 && (resAux = fscanf(log, "%x %c ", &futuro[i], &modeAux)) == EOF) {
-						endOfFile = i;
-						futuro[i] = -1;
-					} else {
-						futuro[i] = -1;
-					}
-				}
-			}
-
-			fseek(log, -TAM_VET_FUT + endOfFile, SEEK_CUR);
-
-		}
-
 		unsigned int page = addr >> bits;
 
 		#ifdef _DEBUG
@@ -180,7 +184,9 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		#endif
 
 		if (!tp[page]->inMemory) { // não achou
-			pageFault(tipoAlg, mem, numQuadros, tp, page, futuro);
+			if (pageFault(tipoAlg, page)) {
+				return 1;
+			}
 		} else {
 			pageHits++;
 		}
@@ -212,7 +218,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 
 	printf("Número de Páginas em Memória: %d\n", numQuadros);
 	printf("Número de Páginas na TP: %d\n", numPages);
-	printf("Instante Final: %ld\n", instante);
+	printf("Instante Final: %d\n", instante);
 	printf("Page faults: %d\n", pageFaults);
 	printf("Page hits: %d\n", pageHits);
 	printf("Reescritas para a memória: %d\n", memWrites);
@@ -228,9 +234,10 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
  * numQuadros -> o tamanho do vetor mem
  * tp -> a tabela de páginas
  * numPag -> o tamanho da tp
- * futuro -> o vetor de páginas futuras (tamanho TAM_VET_FUT)
+ * futuro -> o vetor de páginas futuras (tamanho tamFuturo)
+ * tamFuturo -> tamanho do futuro
  */
-static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag, int* futuro) {
+static int pageFault(VMEM_tipoAlgoritmo tipoAlg, int numPag) {
 	pageFaults++;
 
 	#ifdef _DEBUG
@@ -288,7 +295,50 @@ static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, Entr
 
 			// se chegou aqui sem achar, todos são RW. Tirar o primeiro. (já é zero aqui)
 		} else if (tipoAlg == ALG_NOVO) { // TIPO DE ALGORÍTMO NOVO
+			int *proxAcc = (int *) malloc(numQuadros * sizeof(int));
+			if (!proxAcc) {
+				puts("Memória insuficiente (erro no malloc do vetor de próximos).");
+				return 1;
+			}
 
+			pthread_t threads[NUM_THREADS];
+			for (int i = 0; i < NUM_THREADS; i++) { // 8 threads
+				ParamThread *params = (ParamThread *) malloc (sizeof(ParamThread));
+				if (!params) {
+					puts("ERRO DE MEMÓRIA (malloc)");
+					exit(1);
+				}
+
+				params->ini = i * numQuadros / NUM_THREADS;
+				params->fin = params->ini + numQuadros / NUM_THREADS;
+				params->proxAcc = proxAcc;
+
+				pthread_create(&threads[i], NULL, threadMain, (void *) params);
+			}
+
+			for (int i = 0; i < 8; i++) {
+				pthread_join(threads[i], NULL);
+			}
+
+
+			// for (int i = 0; i < numQuadros; i++) {
+			// 	for (int j = instante; j < tamFuturo; j++) {
+			// 		if (futuro[j] == mem[i]) {
+			// 			proxAcc[i] = j;
+			// 			break;
+			// 		}
+			// 	}
+			// }
+
+			int maiorProxAcc = proxAcc[0];
+			for (int i = 0; i < numQuadros; i++) {
+				if (proxAcc[i] > maiorProxAcc) {
+					maiorProxAcc = proxAcc[i];
+					newEnd = i;
+				}
+			}
+
+			free(proxAcc);
 		}
 
 	} // sai daqui com newEnd = endereço da página a ser substituída
@@ -305,6 +355,8 @@ static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, Entr
 	tp[numPag]->endFisico = newEnd;
 
 	mem[newEnd] = numPag;
+
+	return 0;
 }
 
 /**
@@ -318,6 +370,23 @@ static int power2(int num) {
 	}
 
 	return result;
+}
+
+static void *threadMain(void *params) {
+	ParamThread *p = (ParamThread *) params;
+
+	for (int i = p->ini; i < p->fin; i++) {
+		for (int j = instante; j < tamFuturo; j++) {
+			if (futuro[j] == mem[i]) {
+				p->proxAcc[i] = j;
+				break;
+			}
+		}
+	}
+
+	free(p);
+
+	pthread_exit(NULL);
 }
 
 #ifdef _DEBUG

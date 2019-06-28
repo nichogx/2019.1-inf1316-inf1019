@@ -22,7 +22,7 @@ $(OBJDIR)/%.o: %.c
 
 OBJS = $(addprefix $(OBJDIR)/, main.o simvirtual.o)
 simvirtual: $(OBJS) simvirtual.h
-	gcc -Wall -o simvirtual $(OBJS)
+	gcc -Wall -o simvirtual $(OBJS) -pthread
 
 # ==== CLEAN ====
 
