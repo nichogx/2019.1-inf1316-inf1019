@@ -125,7 +125,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		while (numQuadros % NUM_THREADS) { // deve ser múltiplo
 			NUM_THREADS--;
 		}
-		printf("Algorítmo NOVO: Setando %d threads de %d disponíveis.\n", NUM_THREADS, get_nprocs_conf());
+		printf("Algorítmo NOVO: Esta máquina possui %d cores. Usando %d threads.\n", get_nprocs_conf(), NUM_THREADS);
 
 		fseek(log, 0L, SEEK_END);
 		int sz = ftell(log);
