@@ -4,6 +4,8 @@
 
 #include "simvirtual.h"
 
+// tipo booleano
+
 typedef int bool;
 #define true 1
 #define false 0
@@ -14,11 +16,17 @@ typedef int bool;
 #define FLAG_READ 0x01
 #define FLAG_WRITE 0x02
 
+// constantes
+
+#define TAM_VET_FUT 1000
+#define INST_NOVO 128
+#define INST_NRU 1000
+
 // estruturas encapsuladas
 
 typedef struct entrTab {
 	__int64_t lastAccess;
-	unsigned char flagsRW; // 0001 READ, 0010 WRITE
+	unsigned int flagsRW; // 0001 READ, 0010 WRITE
 	unsigned int endFisico;
 	bool inMemory;
 } EntradaTabela;
@@ -39,7 +47,7 @@ static int globalNPages = 0;
 
 // cabeçalho das funções locais
 
-static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag, FILE *log);
+static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag, int* futuro);
 static int power2(int num);
 
 #ifdef _DEBUG
@@ -94,9 +102,14 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 	}
 
 	// vetor de páginas lidas para algoritmo NOVO
-	int sizeNovo = 1000; // tamanho do vetor novo
-	int instNovo = 256; // iterações necessárias para cada atualização do vetor
-	int *novo = (int *) malloc(sizeNovo * sizeof(int));
+	int *futuro = NULL;
+	if (tipoAlg == ALG_NOVO) {
+		futuro = (int *) malloc(TAM_VET_FUT * sizeof(int));
+		if (!futuro) {
+			puts("Memória insuficiente (erro no malloc do vetor futuro).");
+			return 1;
+		}
+	}
 
 	#ifdef _DEBUG
 	// globaliza mem ao módulo para liberar
@@ -121,40 +134,40 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 			return 1;
 		}
 
-		// reseta as flags a cada 128 iterações (só se for NRU)
-		if (tipoAlg == ALG_NRU && instante % 128 == 0) {
+		// reseta as flags a cada INST_NRU iterações (só se for NRU)
+		if (tipoAlg == ALG_NRU && instante % INST_NRU == 0) {
 			for (int i = 0; i < numQuadros; i++) {
 				if (mem[i] != -1 && (tp[mem[i]]->flagsRW & FLAG_READ)) tp[mem[i]]->flagsRW &= FLAG_WRITE;
 			}
 		}
 
-		// atualiza o vetor novo a cada instNovo iterações (só se for NOVO)
-		if (tipoAlg == ALG_NOVO && instante % instNovo == 0) {
-			
-			int endOfFile = 0;
-			fseek(log, sizeNovo - instNovo, SEEK_CUR);
+		// atualiza o vetor novo a cada INST_NOVO iterações (só se for NOVO)
+		if (tipoAlg == ALG_NOVO && instante % INST_NOVO == 0) {
 
-			for (int i = 0; i < sizeNovo; i++) {
-				
+			int endOfFile = 0;
+			fseek(log, TAM_VET_FUT - INST_NOVO, SEEK_CUR);
+
+			for (int i = 0; i < TAM_VET_FUT; i++) {
+
 				// anda com as informações do vetor sem precisar ler o arquivo
-				if(i < sizeNovo - instNovo) {
-					novo[i] = novo[i + instNovo];
-				
+				if(i < TAM_VET_FUT - INST_NOVO) {
+					futuro[i] = futuro[i + INST_NOVO];
+
 				} else {
 					int resAux = 0;
 					char modeAux = 'U';
-					
-					// atualiza as últimas instNovo posições com fscanf do arquivo
-					if (endOfFile == 0 && (resAux = fscanf(log, "%x %c ", &novo[i], &modeAux)) == EOF) {
+
+					// atualiza as últimas INST_NOVO posições com fscanf do arquivo
+					if (endOfFile == 0 && (resAux = fscanf(log, "%x %c ", &futuro[i], &modeAux)) == EOF) {
 						endOfFile = i;
-						novo[i] = -1;
+						futuro[i] = -1;
 					} else {
-						novo[i] = -1;
+						futuro[i] = -1;
 					}
 				}
 			}
 
-			fseek(log, -sizeNovo + endOfFile, SEEK_CUR);
+			fseek(log, -TAM_VET_FUT + endOfFile, SEEK_CUR);
 
 		}
 
@@ -167,7 +180,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		#endif
 
 		if (!tp[page]->inMemory) { // não achou
-			pageFault(tipoAlg, mem, numQuadros, tp, page, log);
+			pageFault(tipoAlg, mem, numQuadros, tp, page, futuro);
 		} else {
 			pageHits++;
 		}
@@ -192,7 +205,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 	free(tp);
 
 	// libera vetor para ALG_NOVO
-	free(novo);
+	if (tipoAlg == ALG_NOVO) free(futuro);
 
 	// libera vetor que representa memória
 	free(mem);
@@ -209,8 +222,15 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 
 // funções locais
 
-// retorna o índice na memória com a nova página
-static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag, FILE *log) {
+/**
+ * tipoAlg -> o tipo do algorítmo
+ * mem -> o vetor que representa a memória
+ * numQuadros -> o tamanho do vetor mem
+ * tp -> a tabela de páginas
+ * numPag -> o tamanho da tp
+ * futuro -> o vetor de páginas futuras (tamanho TAM_VET_FUT)
+ */
+static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, EntradaTabela **tp, int numPag, int* futuro) {
 	pageFaults++;
 
 	#ifdef _DEBUG
@@ -287,7 +307,9 @@ static void pageFault(VMEM_tipoAlgoritmo tipoAlg, int *mem, int numQuadros, Entr
 	mem[newEnd] = numPag;
 }
 
-// retorna a potência de 2 equivalente
+/**
+ * retorna 2^num
+ */
 static int power2(int num) {
 	int result = 1;
 	while (num) {
