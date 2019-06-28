@@ -21,6 +21,7 @@ typedef int bool;
 // constantes
 
 #define NUM_THREADS 8
+#define MAX_FUTURO 100000
 #define INST_NRU 1000
 
 // estruturas encapsuladas
@@ -316,10 +317,9 @@ static int pageFault(VMEM_tipoAlgoritmo tipoAlg, int numPag) {
 				pthread_create(&threads[i], NULL, threadMain, (void *) params);
 			}
 
-			for (int i = 0; i < 8; i++) {
+			for (int i = 0; i < NUM_THREADS; i++) {
 				pthread_join(threads[i], NULL);
 			}
-
 
 			// for (int i = 0; i < numQuadros; i++) {
 			// 	for (int j = instante; j < tamFuturo; j++) {
@@ -377,7 +377,7 @@ static void *threadMain(void *params) {
 
 	for (int i = p->ini; i < p->fin; i++) {
 		for (int j = instante; j < tamFuturo; j++) {
-			if (futuro[j] == mem[i]) {
+			if (futuro[j] == mem[i] || j - instante > MAX_FUTURO) {
 				p->proxAcc[i] = j;
 				break;
 			}
