@@ -122,6 +122,7 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 	// vetor de páginas lidas para algoritmo NOVO
 	if (tipoAlg == ALG_NOVO) {
 		NUM_THREADS = get_nprocs_conf();
+		if (NUM_THREADS > 16) NUM_THREADS = 16; // não vale a pena mais que isso
 		while (numQuadros % NUM_THREADS) { // deve ser múltiplo
 			NUM_THREADS--;
 		}
