@@ -3,6 +3,7 @@
 #endif
 
 #include <pthread.h>
+#include <sys/sysinfo.h>
 
 #include "simvirtual.h"
 
@@ -20,8 +21,7 @@ typedef int bool;
 
 // constantes
 
-#define NUM_THREADS 8
-#define MAX_FUTURO 90000
+#define MAX_FUTURO 10000000
 #define INST_NRU 1000
 
 // estruturas encapsuladas
@@ -45,7 +45,10 @@ static int pageFaults = 0;
 static int pageHits = 0;
 static int memWrites = 0;
 
+static int NUM_THREADS = 4;
+
 static int *mem = NULL;
+static int *proxAcc = NULL;
 static int numQuadros = 0;
 static EntradaTabela **tp = NULL;
 static int numPages = 0;
@@ -118,6 +121,12 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 
 	// vetor de páginas lidas para algoritmo NOVO
 	if (tipoAlg == ALG_NOVO) {
+		NUM_THREADS = get_nprocs_conf();
+		if (NUM_THREADS % 4) {
+			NUM_THREADS = 4;
+		}
+		printf("Algorítmo NOVO: Setando %d threads.\n", NUM_THREADS);
+
 		fseek(log, 0L, SEEK_END);
 		int sz = ftell(log);
 		fseek(log, 0L, SEEK_SET);
@@ -127,6 +136,16 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		if (!futuro) {
 			puts("Memória insuficiente (erro no malloc do vetor futuro).");
 			return 1;
+		}
+
+		proxAcc = (int *) malloc(numQuadros * sizeof(int));
+		if (!proxAcc) {
+			puts("Memória insuficiente (erro no malloc do vetor de próximos).");
+			return 1;
+		}
+
+		for (int i = 0; i < numQuadros; i++) {
+			proxAcc[i] = 0;
 		}
 
 		int posVet = 0;
@@ -212,7 +231,10 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 	free(tp);
 
 	// libera vetor para ALG_NOVO
-	if (tipoAlg == ALG_NOVO) free(futuro);
+	if (tipoAlg == ALG_NOVO) {
+		free(futuro);
+		free(proxAcc);
+	}
 
 	// libera vetor que representa memória
 	free(mem);
@@ -296,12 +318,6 @@ static int pageFault(VMEM_tipoAlgoritmo tipoAlg, int numPag) {
 
 			// se chegou aqui sem achar, todos são RW. Tirar o primeiro. (já é zero aqui)
 		} else if (tipoAlg == ALG_NOVO) { // TIPO DE ALGORÍTMO NOVO
-			int *proxAcc = (int *) malloc(numQuadros * sizeof(int));
-			if (!proxAcc) {
-				puts("Memória insuficiente (erro no malloc do vetor de próximos).");
-				return 1;
-			}
-
 			pthread_t threads[NUM_THREADS];
 			for (int i = 0; i < NUM_THREADS; i++) { // 8 threads
 				ParamThread *params = (ParamThread *) malloc (sizeof(ParamThread));
@@ -337,8 +353,6 @@ static int pageFault(VMEM_tipoAlgoritmo tipoAlg, int numPag) {
 					newEnd = i;
 				}
 			}
-
-			free(proxAcc);
 		}
 
 	} // sai daqui com newEnd = endereço da página a ser substituída
@@ -377,11 +391,13 @@ static void *threadMain(void *params) {
 
 	for (int i = p->ini; i < p->fin; i++) {
 		for (int j = instante; j < tamFuturo; j++) {
-			if (futuro[j] == mem[i] || j - instante > MAX_FUTURO) {
+			if (futuro[j] == mem[i] || j - instante >= MAX_FUTURO || j == tamFuturo - 1) {
 				p->proxAcc[i] = j;
 				break;
 			}
 		}
+
+		if (p->proxAcc[i] - instante >= MAX_FUTURO || p->proxAcc[i] == tamFuturo - 1) break;
 	}
 
 	free(p);
