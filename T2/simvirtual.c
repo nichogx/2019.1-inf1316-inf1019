@@ -122,10 +122,10 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 	// vetor de páginas lidas para algoritmo NOVO
 	if (tipoAlg == ALG_NOVO) {
 		NUM_THREADS = get_nprocs_conf();
-		if (NUM_THREADS % 4) {
-			NUM_THREADS = 4;
+		while (numQuadros % NUM_THREADS) { // deve ser múltiplo
+			NUM_THREADS--;
 		}
-		printf("Algorítmo NOVO: Setando %d threads.\n", NUM_THREADS);
+		printf("Algorítmo NOVO: Setando %d threads de %d disponíveis.\n", NUM_THREADS, get_nprocs_conf());
 
 		fseek(log, 0L, SEEK_END);
 		int sz = ftell(log);
