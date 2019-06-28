@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
 
 #ifdef _DEBUG
 #include <unistd.h>
@@ -66,6 +67,7 @@ int main(int argc, char **argv) {
 
 	// chamar algorítmo correto
 	int ret = 0;
+	long tinicial = time(NULL);
 	if (strcmp(algoritmo, "lru") == 0) {
 		ret = VMEM_inicia(arqFile, tamPag, tamMem, ALG_LRU);
 	} else if (strcmp(algoritmo, "nru") == 0) {
@@ -80,7 +82,7 @@ int main(int argc, char **argv) {
 	if (ret) {
 		puts("ERRO NA SIMULAÇÃO.");
 	} else {
-		puts("SIMULAÇÃO FINALIZADA.");
+		printf("SIMULAÇÃO FINALIZADA. TEMPO: %ld segundos\n", time(NULL) - tinicial);
 	}
 	fclose(arqFile);
 

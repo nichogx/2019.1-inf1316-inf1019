@@ -21,7 +21,7 @@ typedef int bool;
 // constantes
 
 #define NUM_THREADS 8
-#define MAX_FUTURO 100000
+#define MAX_FUTURO 90000
 #define INST_NRU 1000
 
 // estruturas encapsuladas
