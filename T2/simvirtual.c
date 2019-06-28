@@ -93,6 +93,11 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		return 1;
 	}
 
+	// vetor de páginas lidas para algoritmo NOVO
+	int sizeNovo = 1000; // tamanho do vetor novo
+	int instNovo = 256; // iterações necessárias para cada atualização do vetor
+	int *novo = (int *) malloc(sizeNovo * sizeof(int));
+
 	#ifdef _DEBUG
 	// globaliza mem ao módulo para liberar
 	globalMEM = mem;
@@ -116,11 +121,41 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 			return 1;
 		}
 
-		// reseta as flags a cada 1000 iterações (só se for NRU)
+		// reseta as flags a cada 128 iterações (só se for NRU)
 		if (tipoAlg == ALG_NRU && instante % 128 == 0) {
 			for (int i = 0; i < numQuadros; i++) {
 				if (mem[i] != -1 && (tp[mem[i]]->flagsRW & FLAG_READ)) tp[mem[i]]->flagsRW &= FLAG_WRITE;
 			}
+		}
+
+		// atualiza o vetor novo a cada instNovo iterações (só se for NOVO)
+		if (tipoAlg == ALG_NOVO && instante % instNovo == 0) {
+			
+			int endOfFile = 0;
+			fseek(log, sizeNovo - instNovo, SEEK_CUR);
+
+			for (int i = 0; i < sizeNovo; i++) {
+				
+				// anda com as informações do vetor sem precisar ler o arquivo
+				if(i < sizeNovo - instNovo) {
+					novo[i] = novo[i + instNovo];
+				
+				} else {
+					int resAux = 0;
+					char modeAux = 'U';
+					
+					// atualiza as últimas instNovo posições com fscanf do arquivo
+					if (endOfFile == 0 && (resAux = fscanf(log, "%x %c ", &novo[i], &modeAux)) == EOF) {
+						endOfFile = i;
+						novo[i] = -1;
+					} else {
+						novo[i] = -1;
+					}
+				}
+			}
+
+			fseek(log, -sizeNovo + endOfFile, SEEK_CUR);
+
 		}
 
 		unsigned int page = addr >> bits;
@@ -155,6 +190,9 @@ int VMEM_inicia(FILE *log, int tamPag, int tamMem, VMEM_tipoAlgoritmo tipoAlg) {
 		free(tp[i]);
 	}
 	free(tp);
+
+	// libera vetor para ALG_NOVO
+	free(novo);
 
 	// libera vetor que representa memória
 	free(mem);
