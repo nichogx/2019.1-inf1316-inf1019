@@ -4,10 +4,14 @@ import re
 
 timeInicial = time.time()
 
-tamanhoPaginas = [32]
-tamanhoMemoria = [8]
+tamanhoPaginas = [8, 16, 32]
+tamanhoMemoria = [1, 2, 4, 8, 16]
 arquivos = ["compilador", "compressor", "matriz", "simulador"]
 tipos = ["lru", "nru", "novo"]
+
+print("Gerando %d tabelas de resultado" % (len(tamanhoPaginas) * len(tamanhoMemoria)))
+print("Isso deve demorar alguns minutos/horas")
+print()
 
 for pag in tamanhoPaginas:
 	for mem in tamanhoMemoria:
