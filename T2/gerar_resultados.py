@@ -6,8 +6,8 @@ timeInicial = time.time()
 
 tamanhoPaginas = [8, 16, 32]
 tamanhoMemoria = [1, 2, 4, 8, 16]
-arquivos = ["compilador", "compressor", "matriz", "simulador"]
-tipos = ["lru", "nru", "novo"]
+arquivos = ["compressor", "matriz", "compilador", "simulador"]
+tipos = ["nru", "lru", "novo"]
 
 print("Gerando %d tabelas de resultado" % (len(tamanhoPaginas) * len(tamanhoMemoria)))
 print("Isso deve demorar alguns minutos/horas")
@@ -17,9 +17,9 @@ for pag in tamanhoPaginas:
 	for mem in tamanhoMemoria:
 		print("MEMÓRIA DE %dMB, PÁGINAS DE %dKB" % (mem, pag))
 
-		print(20 * " " + " |             LRU               |             NRU               |             NOVO              | ")
+		print(20 * " " + " |             NRU               |             LRU               |             NOVO              | ")
 		print(20 * " " + " | " + "  PF   | REWRITES | TEMPO (s) | " * 3)
-		print(118 * "-")
+		print(118 * ".")
 
 		for arq in arquivos:
 			arq += ".log"
